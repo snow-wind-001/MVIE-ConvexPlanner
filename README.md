@@ -117,4 +117,5 @@ FIRI提供两种可视化方法：
 
 ## 致谢
 
-- 本项目由西安理工大学电子信息学院机器学习实验室开发
+- 本项目由沈阳理工大学装备工程学院机器学习实验室开发
+- 复现了浙江大学fastlab实验室论文《Fast Iterative Region Inflation for Computing Large 2-D/3-D Convex Regions of Obstacle-Free Space》
