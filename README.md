@@ -117,4 +117,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- This project was developed by the ML Lab of SLU-EE 
+- This project was developed by the ML Lab of SLU-EE
