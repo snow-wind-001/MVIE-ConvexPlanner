@@ -1,36 +1,36 @@
-# FIRI: Fast Incremental Region Inflation for Path Planning
+# FIRI: 快速增量区域膨胀路径规划算法
 
-## Introduction
+## 项目介绍
 
-FIRI (Fast Incremental Region Inflation) is an advanced path planning algorithm for autonomous robots in 3D environments with obstacles. The algorithm works by iteratively computing safe regions through constrained ellipsoids and polytopes, then generating smooth trajectories that avoid obstacles while maintaining smooth direction changes.
+FIRI（Fast Incremental Region Inflation）是一种先进的路径规划算法，专为在三维障碍环境中运行的自主机器人设计。该算法通过迭代计算约束椭球体和凸多面体的安全区域，生成平滑轨迹，可避开障碍物同时保持方向变化的平滑性。
 
-## Key Features
+## 功能特点
 
-- **3D Path Planning**: Generates collision-free paths in three-dimensional space
-- **Region-based Planning**: Uses incrementally inflated safe regions to guide path planning
-- **Adaptive Smoothing**: Path smoothing with angle constraints to reduce sharp turns
-- **Performance Monitoring**: Built-in performance evaluation tools for benchmarking
-- **Visualization Tools**: Multiple visualization options (Open3D and Matplotlib)
+- **3D路径规划**: 在三维空间中生成无碰撞路径
+- **基于区域的规划**: 使用增量膨胀的安全区域引导路径规划
+- **自适应平滑**: 具有角度约束的路径平滑处理，减少急转弯
+- **性能监控**: 内置性能评估工具用于基准测试
+- **可视化工具**: 多种可视化选项（Open3D和Matplotlib）
 
-## Project Structure
+## 项目结构
 
 ```
 FIRI/
-├── firi/                       # Core FIRI algorithm implementation
-│   ├── geometry/               # Geometry utilities (convex polytopes, ellipsoids)
-│   ├── planning/               # Path planning algorithms
-│   ├── utils/                  # Utility functions
-│   └── visualization/          # Visualization tools
-├── temp/                       # Temporary data output directory
-├── main.py                     # Main execution script
-├── analyze_trajectory.py       # Trajectory analysis tools
-├── angle_comparison.py         # Path angle comparison script
-└── README.md                   # This file
+├── firi/                       # FIRI算法核心实现
+│   ├── geometry/               # 几何工具（凸多面体，椭球体）
+│   ├── planning/               # 路径规划算法
+│   ├── utils/                  # 工具函数
+│   └── visualization/          # 可视化工具
+├── temp/                       # 临时数据输出目录
+├── main.py                     # 主执行脚本
+├── analyze_trajectory.py       # 轨迹分析工具
+├── angle_comparison.py         # 路径角度比较脚本
+└── README.md                   # 本文件
 ```
 
-## Installation
+## 安装方法
 
-### Prerequisites
+### 环境要求
 
 - Python 3.7+
 - NumPy
@@ -38,83 +38,83 @@ FIRI/
 - Open3D
 - SciPy
 
-### Setup
+### 安装步骤
 
 ```bash
-# Clone the repository
+# 克隆仓库
 git clone https://gitee.com/ML-Lab-of-SLU-EE/firi.git
 cd firi
 
-# Install dependencies
+# 安装依赖
 pip install numpy matplotlib open3d scipy psutil
 ```
 
-## Usage
+## 使用方法
 
-### Basic Execution
+### 基本执行
 
 ```bash
 python main.py
 ```
 
-This will:
-1. Generate random obstacles in 3D space
-2. Plan a collision-free path from start to goal
-3. Apply path smoothing to reduce sharp angle changes
-4. Visualize the results using both Matplotlib and Open3D
-5. Generate performance metrics in the `temp` directory
+执行后将：
+1. 在3D空间中生成随机障碍物
+2. 从起点到终点规划无碰撞路径
+3. 应用路径平滑以减少急转弯
+4. 使用Matplotlib和Open3D可视化结果
+5. 在`temp`目录中生成性能指标
 
-### Path Analysis
+### 路径分析
 
 ```bash
 python analyze_trajectory.py
 ```
 
-Analyzes a generated path and provides statistics on angles, curvature, and safety.
+分析生成的路径并提供角度、曲率和安全性统计数据。
 
-### Path Angle Comparison
+### 路径角度比较
 
 ```bash
 python angle_comparison.py
 ```
 
-Compares the original path with the smoothed path, focusing on angle changes.
+比较原始路径与平滑后的路径，重点关注角度变化。
 
-## Algorithm Details
+## 算法详情
 
-The FIRI algorithm operates in several steps:
+FIRI算法分为以下几个步骤：
 
-1. **Obstacle Processing**: Converts obstacles into a form suitable for collision checking
-2. **Safe Region Computation**: Generates convex polytopes and ellipsoids representing safe regions
-3. **Path Planning**: Creates a collision-free path through the safe regions
-4. **Path Smoothing**: Applies adaptive smoothing to reduce sharp angle changes
-5. **Collision Verification**: Ensures the final path is collision-free
+1. **障碍物处理**: 将障碍物转换为适合碰撞检测的形式
+2. **安全区域计算**: 生成代表安全区域的凸多面体和椭球体
+3. **路径规划**: 通过安全区域创建无碰撞路径
+4. **路径平滑**: 应用自适应平滑以减少急转弯
+5. **碰撞验证**: 确保最终路径无碰撞
 
-## Performance
+## 性能指标
 
-The algorithm's performance is measured across various stages:
+算法的性能在各个阶段进行测量：
 
-- Path planning: ~0.08 seconds (core algorithm)
-- Path smoothing: ~0.03 seconds
-- Total planning time: ~0.15 seconds (excluding visualization)
+- 路径规划: ~0.08秒（核心算法）
+- 路径平滑: ~0.03秒
+- 总规划时间: ~0.15秒（不包括可视化）
 
-Performance metrics are automatically saved to the `temp` directory for analysis.
+性能指标自动保存到`temp`目录以供分析。
 
-## Visualization
+## 可视化功能
 
-FIRI provides two visualization methods:
+FIRI提供两种可视化方法：
 
-1. **Matplotlib**: Static 3D visualization of the path and obstacles
-2. **Open3D**: Interactive 3D visualization with inflated obstacles and path segments
+1. **Matplotlib**: 路径和障碍物的静态3D可视化
+2. **Open3D**: 交互式3D可视化，带有膨胀障碍物和路径段
 
-## Contributing
+## 参与贡献
 
-Contributions to the FIRI project are welcome! Please feel free to submit issues and pull requests.
+欢迎对FIRI项目做出贡献！请随时提交问题和拉取请求。
 
-## License
+## 许可证
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+本项目采用MIT许可证 - 详情请参见LICENSE文件。
 
-## Acknowledgments
+## 致谢
 
-- This project was developed by the ML Lab of SLU-EE
+- 本项目由西安理工大学电子信息学院机器学习实验室开发
