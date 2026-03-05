@@ -163,6 +163,18 @@ def _push_waypoint_to_safety(point, planner, bounds_min, bounds_max, obstacles):
     return point
 
 
+def _deduplicate_points(path, min_dist=0.1):
+    """Remove near-duplicate consecutive points, keep start and goal."""
+    if len(path) <= 2:
+        return path
+    result = [path[0]]
+    for i in range(1, len(path) - 1):
+        if np.linalg.norm(path[i] - result[-1]) > min_dist:
+            result.append(path[i])
+    result.append(path[-1])
+    return np.array(result)
+
+
 def fix_path_collisions(path, planner, space_bounds, max_rounds=8):
     """段级碰撞修复：先推离碰撞路径点，再在碰撞段中插入绕行点。"""
     best_path = np.array(path, dtype=float)
@@ -236,6 +248,25 @@ def fix_path_collisions(path, planner, space_bounds, max_rounds=8):
 
     if best_collisions > 0:
         print(f"碰撞修复完成，剩余 {best_collisions} 段碰撞")
+
+    best_path = _deduplicate_points(best_path)
+
+    # Greedy path simplification: skip intermediate points when direct segment is safe
+    if len(best_path) > 3:
+        simplified = [best_path[0]]
+        i = 0
+        while i < len(best_path) - 1:
+            farthest = i + 1
+            for j in range(len(best_path) - 1, i + 1, -1):
+                if not planner.check_segment_collision(best_path[i], best_path[j]):
+                    farthest = j
+                    break
+            simplified.append(best_path[farthest])
+            i = farthest
+        candidate = np.array(simplified)
+        if not planner.check_path_safety(candidate):
+            best_path = candidate
+
     return best_path
 
 

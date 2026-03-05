@@ -357,6 +357,36 @@ class FIRIPlanner:
             return waypoints
 
     # =====================================================================
+    # 路径后处理: 去重与简化
+    # =====================================================================
+    def _deduplicate_path(self, path, min_dist=0.1):
+        """Remove near-duplicate consecutive points, always keeping start and goal."""
+        if len(path) <= 2:
+            return path
+        result = [path[0]]
+        for i in range(1, len(path) - 1):
+            if np.linalg.norm(path[i] - result[-1]) > min_dist:
+                result.append(path[i])
+        result.append(path[-1])
+        return np.array(result)
+
+    def _simplify_path(self, path):
+        """Greedily skip intermediate waypoints when a direct segment is collision-free."""
+        if len(path) <= 3:
+            return path
+        result = [path[0]]
+        i = 0
+        while i < len(path) - 1:
+            farthest = i + 1
+            for j in range(len(path) - 1, i + 1, -1):
+                if not self.check_segment_collision(path[i], path[j]):
+                    farthest = j
+                    break
+            result.append(path[farthest])
+            i = farthest
+        return np.array(result)
+
+    # =====================================================================
     # 主规划流程 (按伪代码 Algorithm 1 重构)
     # =====================================================================
     def plan_path(self, start, goal, initial_waypoints=None, smoothing=True,
@@ -409,6 +439,9 @@ class FIRIPlanner:
             final_path = np.clip(
                 final_path, self.space_bounds[0], self.space_bounds[1])
 
+        final_path = self._deduplicate_path(final_path)
+        final_path = self._simplify_path(final_path)
+
         self.path_points = final_path
         self.path_collisions = collisions
         path_length = np.sum(np.linalg.norm(np.diff(final_path, axis=0), axis=1))
@@ -428,70 +461,92 @@ class FIRIPlanner:
         return final_path
 
     def _fallback_replan(self, init_path, start, goal, corridors, max_attempts, smoothing):
-        """旧版启发式重规划 (作为安全回退)。"""
-        collisions = self.check_path_safety(init_path)
+        """启发式重规划: 逐步尝试将碰撞路径修正为安全路径。"""
+        current_path = init_path.copy()
+        current_collisions = self.check_path_safety(current_path)
         straight_length = np.linalg.norm(goal - start)
 
+        if not current_collisions:
+            return current_path
+
         for attempt in range(max_attempts):
-            replan_path = init_path.copy()
+            candidate = current_path.copy()
+
             if attempt == 0:
-                for i, region in enumerate(corridors):
-                    if region is None:
+                # FIX: each waypoint only moves toward ITS OWN corridor center
+                for j in range(1, len(candidate) - 1):
+                    seg_idx = j - 1
+                    if seg_idx not in current_collisions:
                         continue
-                    _, ellipsoid = region
-                    for j in range(1, len(replan_path) - 1):
-                        if j - 1 in collisions:
-                            dist = np.linalg.norm(replan_path[j] - ellipsoid.center)
-                            move_dist = min(dist * 0.8, 1.5)
-                            if dist > 1e-10:
-                                direction = (ellipsoid.center - replan_path[j]) / dist
-                                replan_path[j] = ellipsoid.center + direction * move_dist
+                    if seg_idx >= len(corridors) or corridors[seg_idx] is None:
+                        continue
+                    _, ellipsoid = corridors[seg_idx]
+                    dist = np.linalg.norm(candidate[j] - ellipsoid.center)
+                    if dist > 1e-10:
+                        direction = (ellipsoid.center - candidate[j]) / dist
+                        # FIX: move TOWARD center, not past it
+                        move_dist = min(dist * 0.5, 1.5)
+                        candidate[j] = candidate[j] + direction * move_dist
+
             elif attempt == 1:
-                best_path = replan_path.copy()
-                best_collisions = collisions
+                best_candidate = candidate.copy()
+                best_col_count = len(current_collisions)
                 for _ in range(5):
-                    temp_path = init_path.copy()
-                    for idx in collisions:
-                        path_dir = temp_path[min(idx + 1, len(temp_path) - 1)] - temp_path[idx]
+                    temp = current_path.copy()
+                    for idx in current_collisions:
+                        if idx + 1 >= len(temp):
+                            continue
+                        path_dir = temp[idx + 1] - temp[idx]
                         perp_dir = np.cross(path_dir, np.random.randn(3))
                         norm = np.linalg.norm(perp_dir)
                         if norm > 1e-8:
                             perp_dir /= norm
-                            temp_path[idx] += perp_dir * np.linalg.norm(path_dir) * 0.3
-                    temp_col = self.check_path_safety(temp_path)
-                    if len(temp_col) < len(best_collisions):
-                        best_path, best_collisions = temp_path, temp_col
-                replan_path = best_path
-                collisions = best_collisions
+                            wi = min(idx + 1, len(temp) - 2)
+                            temp[wi] += perp_dir * np.linalg.norm(path_dir) * 0.3
+                    temp_col = self.check_path_safety(temp)
+                    if len(temp_col) < best_col_count:
+                        best_candidate = temp.copy()
+                        best_col_count = len(temp_col)
+                candidate = best_candidate
+
             else:
-                for idx in collisions:
-                    if idx >= len(replan_path) - 1:
+                # FIX: track index offset when inserting points
+                ins_offset = 0
+                for idx in current_collisions:
+                    real_idx = idx + ins_offset
+                    if real_idx >= len(candidate) - 1:
                         continue
-                    mid = (replan_path[idx] + replan_path[idx + 1]) / 2
-                    offset = replan_path[idx + 1] - replan_path[idx]
-                    perp = np.cross(offset, np.array([0, 0, 1]))
+                    p1, p2 = candidate[real_idx], candidate[real_idx + 1]
+                    mid = (p1 + p2) / 2
+                    seg_dir = p2 - p1
+                    ortho = np.array([1, 0, 0]) if abs(seg_dir[0]) < 0.9 else np.array([0, 1, 0])
+                    perp = np.cross(seg_dir, ortho)
                     norm = np.linalg.norm(perp)
                     if norm > 1e-8:
                         perp /= norm
                         new_pt = mid + perp * 0.5
-                        replan_path = np.insert(replan_path, idx + 1, new_pt, axis=0)
+                        if not self.check_point_collision(new_pt):
+                            candidate = np.insert(candidate, real_idx + 1, new_pt, axis=0)
+                            ins_offset += 1
 
-            new_col = self.check_path_safety(replan_path)
+            new_col = self.check_path_safety(candidate)
             if not new_col:
                 print("启发式重规划找到安全路径!")
-                init_path = replan_path
+                current_path = candidate
+                current_collisions = []
                 break
-            elif len(new_col) < len(collisions):
-                print(f"碰撞减少: {len(collisions)} -> {len(new_col)}")
-                init_path = replan_path
-                collisions = new_col
+            elif len(new_col) < len(current_collisions):
+                print(f"碰撞减少: {len(current_collisions)} -> {len(new_col)}")
+                current_path = candidate
+                current_collisions = new_col
 
-        final = init_path
-        if smoothing and not self.check_path_safety(final):
-            return final
+        current_path = self._deduplicate_path(current_path)
+
+        if smoothing and not self.check_path_safety(current_path):
+            return current_path
         if smoothing:
             try:
-                bs = self.bspline_smooth(final, smoothing_factor=0.9)
+                bs = self.bspline_smooth(current_path, smoothing_factor=0.9)
                 if not self.check_path_safety(bs):
                     blen = np.sum(np.linalg.norm(np.diff(bs, axis=0), axis=1))
                     if blen > 1.3 * straight_length:
@@ -499,12 +554,12 @@ class FIRIPlanner:
                         sp = start * (1 - t[:, None]) + goal * t[:, None]
                         bs = 0.4 * bs + 0.6 * sp
                         if not self.check_path_safety(bs):
-                            final = bs
+                            current_path = bs
                     else:
-                        final = bs
+                        current_path = bs
             except Exception:
                 pass
-        return final
+        return current_path
     
     def check_path_safety(self, path):
         collisions = []
