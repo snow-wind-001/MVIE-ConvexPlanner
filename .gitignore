@@ -22,9 +22,13 @@ temp/
 # IDE specific files
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 
 # OS specific files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Project-specific
+CLAUDE.md

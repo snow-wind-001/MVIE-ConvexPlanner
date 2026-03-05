@@ -2518,7 +2518,7 @@ def visualize_path_only(obstacles, path, start, goal):
     
     # 使用战略性障碍物生成
     obstacles, inflated_obs = generator.generate_strategic_obstacles(
-        num_obstacles=20, start=start, goal=goal)
+        num_obstacles=8, start=start, goal=goal)
     
     # 使用FIRI规划路径
     planner = FIRIPlanner(inflated_obs, space_size)

@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import math
 import time
+import matplotlib.font_manager as fm
 
 # 从main.py中导入Obstacle和ObstacleSet类
-from main import Obstacle, ObstacleSet
-
+#from main import Obstacle, ObstacleSet
+from obstacle_generator import Obstacle, ObstacleSet
 def load_path(path_file='temp/smoothed_path.pkl'):
     """
     加载路径数据，优先从smoothed_path.pkl加载，如果不存在则尝试其他文件
@@ -538,4 +539,17 @@ def main():
     print("\n分析完成！")
 
 if __name__ == "__main__":
-    main() 
+    # 自动选择可用的中文字体，优先级列表
+    _preferred_fonts = ['SimHei', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Noto Sans CJK', 'AR PL UKai CN', 'DejaVu Sans']
+    _available_names = {f.name for f in fm.fontManager.ttflist}
+
+    for _f in _preferred_fonts:
+        if _f in _available_names:
+            plt.rcParams['font.family'] = _f
+            break
+    else:
+        plt.rcParams['font.family'] = 'DejaVu Sans'  # 回退
+
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    main()

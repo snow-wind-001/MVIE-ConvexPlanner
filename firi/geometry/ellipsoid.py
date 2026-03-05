@@ -301,28 +301,3 @@ class Ellipsoid:
             result = np.zeros_like(halfspace)
             result[0] = 1.0
             return result
-    
-    def to_mesh(self):
-        """创建椭球体的网格表示，用于可视化"""
-        try:
-            import open3d as o3d
-            
-            # 创建单位球
-            mesh = o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
-            vertices = np.asarray(mesh.vertices)
-            
-            # 确保SVD有效
-            self._ensure_valid_svd()
-            
-            # 变换顶点
-            Q_sqrt = self._cached_values.get('Q_sqrt', np.eye(self.dim))
-            transformed_vertices = vertices @ Q_sqrt.T + self.center
-            
-            # 更新网格顶点
-            mesh.vertices = o3d.utility.Vector3dVector(transformed_vertices)
-            mesh.compute_vertex_normals()
-            
-            return mesh
-        except Exception as e:
-            print(f"创建椭球体网格时出错: {e}")
-            return None 

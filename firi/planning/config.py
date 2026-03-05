@@ -31,6 +31,16 @@ class FIRIConfig:
         self.mvie_max_iterations = 100    # MVIE最大迭代次数
         self.mvie_tolerance = 1e-6        # MVIE收敛容差
         
+        # Pre-FIRI 安全推离参数 (伪代码 Steps 5-13)
+        self.d_safe = 0.5               # 安全距离阈值
+        self.push_iterations = 10       # 最大推离迭代次数
+        self.push_delta = 0.05          # 推离额外缓冲
+        
+        # 轨迹约束优化参数 (伪代码 Step 25)
+        self.a_max = 4.0                # 最大加速度 (控制点二阶差分上限)
+        self.jerk_max = 8.0             # 最大 jerk (控制点三阶差分上限)
+        self.opt_max_iter = 200         # 优化最大迭代次数
+        
         # 计时统计
         self.timing_stats = {}
     

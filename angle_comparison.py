@@ -4,6 +4,47 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import time
+import matplotlib.font_manager as fm
+import warnings
+
+# 抑制 tkinter/Matplotlib 关于 DejaVu Sans 缺字的特定警告（可选）
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r"Glyph .* missing from font\\(s\\) DejaVu Sans\\."
+)
+
+# 优先使用系统中文字体，若无则回退并提示安装
+_preferred_fonts = ['SimHei', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Noto Sans CJK', 'AR PL UKai CN', 'DejaVu Sans']
+_available = {f.name for f in fm.fontManager.ttflist}
+for _f in _preferred_fonts:
+    if _f in _available:
+        plt.rcParams['font.family'] = _f
+        plt.rcParams['font.sans-serif'] = [_f]
+        break
+else:
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    print("未检测到系统中文字体。建议安装：sudo apt-get update && sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei")
+
+plt.rcParams['axes.unicode_minus'] = False
+
+# ====== 新增：放大图表字体的全局配置（根据需要调整数值） ======
+BASE_FONT = 16          # 基准字体大小
+TITLE_FONT = 20         # 标题字体大小
+LABEL_FONT = 18         # 坐标轴标签字体大小
+TICK_FONT = 14          # 刻度字体大小
+LEGEND_FONT = 16        # 图例字体大小
+
+plt.rcParams.update({
+    'font.size': BASE_FONT,
+    'axes.titlesize': TITLE_FONT,
+    'axes.labelsize': LABEL_FONT,
+    'xtick.labelsize': TICK_FONT,
+    'ytick.labelsize': TICK_FONT,
+    'legend.fontsize': LEGEND_FONT,
+    'figure.titlesize': TITLE_FONT
+})
+# ===================================================================
 
 def load_path(path_file):
     """加载轨迹数据"""
@@ -106,6 +147,12 @@ def compare_paths(original_path, smoothed_path, obstacles=None):
     ax2.set_ylabel('Y')
     ax2.set_zlabel('Z')
     
+    # 计算用于对比子图的统一坐标范围，但不要修改 ax1 与 ax2 的显示（只用于 ax3）
+    all_points_for_limits = np.vstack([np.array(original_path), np.array(smoothed_path)])
+    xmin, ymin, zmin = np.min(all_points_for_limits, axis=0) - 0.5
+    xmax, ymax, zmax = np.max(all_points_for_limits, axis=0) + 0.5
+    common_limits = (xmin, xmax, ymin, ymax, zmin, zmax)
+    
     # 绘制障碍物（如果有）
     if obstacles is not None:
         for obs in obstacles.obstacle_list:
@@ -124,7 +171,7 @@ def compare_paths(original_path, smoothed_path, obstacles=None):
             except:
                 continue
     
-    # 同时显示两条路径
+    # 同时显示两条路径（只修改这张对比图的坐标系与视角，保持 ax1 与 ax2 不变）
     ax3 = fig.add_subplot(233, projection='3d')
     ax3.plot([p[0] for p in original_path], 
              [p[1] for p in original_path], 
@@ -138,6 +185,57 @@ def compare_paths(original_path, smoothed_path, obstacles=None):
     ax3.set_zlabel('Z')
     ax3.legend()
     
+    # 为避免 x/z 轴范围错误：取 ax1 与 ax2 的 x,z 并集，y 保持 ax1 的范围（因为你说 y 是正确的）
+    try:
+        # 获取 ax1, ax2 的当前范围
+        ax1_xlim = ax1.get_xlim()
+        ax2_xlim = ax2.get_xlim()
+        ax1_ylim = ax1.get_ylim()
+        ax2_ylim = ax2.get_ylim()
+        ax1_zlim = ax1.get_zlim()
+        ax2_zlim = ax2.get_zlim()
+
+        xmin = min(ax1_xlim[0], ax2_xlim[0])
+        xmax = max(ax1_xlim[1], ax2_xlim[1])
+        # 使用 ax1 的 Y 范围（保持原始单图不变）
+        ymin, ymax = ax1_ylim
+        zmin = min(ax1_zlim[0], ax2_zlim[0])
+        zmax = max(ax1_zlim[1], ax2_zlim[1])
+
+        ax3.set_xlim(xmin, xmax)
+        ax3.set_ylim(ymin, ymax)
+        ax3.set_zlim(zmin, zmax)
+
+        # 尝试设置等比例盒子（matplotlib >=3.3 支持）
+        try:
+            dx = max(xmax - xmin, 1e-6)
+            dy = max(ymax - ymin, 1e-6)
+            dz = max(zmax - zmin, 1e-6)
+            ax3.set_box_aspect((dx, dy, dz))
+        except Exception:
+            pass
+
+        # 让视角与 ax1 保持一致
+        try:
+            ax3.view_init(elev=ax1.elev, azim=ax1.azim)
+        except Exception:
+            try:
+                # 备用：从 ax1 当前视图获取参数并设置
+                azim = getattr(ax1, 'azim', None)
+                elev = getattr(ax1, 'elev', None)
+                if azim is not None and elev is not None:
+                    ax3.view_init(elev=elev, azim=azim)
+            except Exception:
+                pass
+    except Exception:
+        # 若任何步骤失败，回退到使用 common_limits（原有行为）
+        try:
+            ax3.set_xlim(common_limits[0], common_limits[1])
+            ax3.set_ylim(common_limits[2], common_limits[3])
+            ax3.set_zlim(common_limits[4], common_limits[5])
+        except Exception:
+            pass
+
     # 角度变化曲线
     ax4 = fig.add_subplot(212)
     x_orig = range(1, len(orig_angles)+1)
@@ -162,8 +260,10 @@ def compare_paths(original_path, smoothed_path, obstacles=None):
     
     # 保存图像
     timestamp = int(time.time())
-    filename = f'temp/angle_comparison_{timestamp}.png'
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    out_dir = '/home/a3080'
+    os.makedirs(out_dir, exist_ok=True)
+    filename = os.path.join(out_dir, f'angle_comparison_{timestamp}.png')
+    plt.savefig(filename, dpi=400, bbox_inches='tight')
     plt.show()
     
     print(f"比较图已保存至: {filename}")
@@ -188,4 +288,4 @@ def main():
     compare_paths(original_path, smoothed_path, obstacles)
 
 if __name__ == "__main__":
-    main() 
+    main()
