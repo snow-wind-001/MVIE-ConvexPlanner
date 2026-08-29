@@ -17,7 +17,7 @@ MVIE-ConvexPlanner 是一种面向三维障碍环境的安全轨迹规划算法�
 | 安全推离 | 无 | FIRI 前迭代推离控制点至安全空间 |
 | 走廊约束 | 启发式路径点调整 | 椭球体走廊作为优化硬约束 |
 | 轨迹优化 | 无约束 B-spline 平滑 | SLSQP 约束优化 (a_max, jerk_max) |
-| 障碍物类型 | 仅球体 | 球体、圆柱体、长方体 |
+| 障碍物类型 | 仅球体 | 球体、圆柱体、长方体、任意朝向有限胶囊体树枝 |
 | 碰撞修复 | 无 | 段级绕行点插入 + 多点绕行 |
 | 碰撞消除率 | ~85% | **100%** (30场景测试) |
 
@@ -96,7 +96,16 @@ python main.py
 | `N_CUBOIDS` | int | 3 | 长方体数量 |
 | `DENSITY` | str | 'medium' | 障碍物密度: 'low'/'medium'/'high' |
 | `NUM_ON_PATH` | int | 2 | 路径上放置的球体数 |
-| `SAFETY_MARGIN` | float | 1.2 | 膨胀安全裕度 |
+| `SAFETY_MARGIN` | float | 0.30 | 障碍物表面的绝对安全净空（米） |
+| `PLANNING_MODE` | str | 'realtime' | `realtime` 50 Hz局部层；`full` FIRI/MVIE全局层 |
+| `REALTIME_BUDGET` | float | 0.020 | 实时局部层时间预算（秒） |
+| `ENABLE_VISUALIZATION` | bool | False | 实时部署关闭；仿真出图时开启 |
+
+### 双频实时架构
+
+- `realtime`：使用 `17×13` 球面深度图、距离相关安全膨胀和有界候选验证；显式保留左、右、上、下候选扇区，超时或无安全解时返回失败。
+- `full`：运行安全推离、FIRI/MVIE、多胞体约束 SLSQP 和安全后处理，用于启动阶段或环境显著变化后的低频全局重规划。
+- 工程部署时应缓存 `full` 输出作为 `plan_realtime(..., reference_path=...)` 的参考路径；控制循环只运行实时局部层。
 
 ### 轨迹分析
 
@@ -104,6 +113,24 @@ python main.py
 python analyze_trajectory.py   # 分析路径角度、曲率、安全性
 python angle_comparison.py     # 原始 vs 平滑路径对比
 ```
+
+### Three.js 无人机穿林测试
+
+`forest_simulator/` 提供可交互的 Three.js 测试场景。浏览器仅负责渲染；
+场景 JSON 中的路径、耗时、碰撞状态和最小净空均由 Python
+`FIRIPlanner` 生成。
+
+```bash
+cd forest_simulator
+npm install
+npm run generate:data   # 运行 30 个固定种子并更新测试证据
+npm run dev             # http://127.0.0.1:5173
+```
+
+测试协议为：full FIRI 低频生成树林参考路径；树干、三条斜向树枝和多球
+树冠都参与真实三维碰撞；随后在航路中段加入新感知横穿树枝或树木，由
+realtime 层在 20 ms 预算内执行一次局部修复。失败时保持悬停，不会将不安全
+路径发送给控制器。
 
 ## 关键参数
 
@@ -120,14 +147,14 @@ python angle_comparison.py     # 原始 vs 平滑路径对比
 
 ## 性能
 
-30 个随机场景的批量测试结果：
+Three.js 固定回归集和未见种子测试结果：
 
 | 指标 | 数值 |
 |------|------|
-| 碰撞消除率 | **100%** (30/30) |
-| 平均规划时间 | 2.44 秒 |
-| 最大规划时间 | 7.23 秒 |
-| 边缘设备限制 | < 60 秒 ✅ |
+| 固定三维树林 | **30/30** 安全成功，P95 `13.89 ms`，最大 `18.40 ms` |
+| 未见三维树林 | 在 143 个 full-safe 参考中 **134/143** 安全成功 |
+| 未见实时性 | **143/143** 在 `20 ms` 内结束，P95 `17.85 ms` |
+| 不安全输出 | **0**（无解时返回 `None` / 安全悬停） |
 
 ## 可视化
 

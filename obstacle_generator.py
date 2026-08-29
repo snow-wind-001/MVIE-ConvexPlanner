@@ -3,19 +3,65 @@ import pickle
 import os
 
 class Obstacle:
-    def __init__(self, shape, center, radius=None, size=None, height=None):
-        self.shape = shape  # 'sphere', 'cylinder', 'cuboid'
-        self.center = center
-        self.radius = radius if radius is not None else 1.0  # 如果未指定半径，则默认为1.0
+    def __init__(
+        self,
+        shape,
+        center=None,
+        radius=None,
+        size=None,
+        height=None,
+        start=None,
+        end=None,
+    ):
+        """Analytic obstacle used by both FIRI and the realtime planner.
+
+        ``capsule`` is a finite 3-D segment swept by a sphere.  It models an
+        arbitrarily oriented tree branch without sampling it into many small
+        spheres.  ``center`` remains available for the conservative FIRI
+        broad phase and is derived from the endpoints when omitted.
+        """
+        self.shape = shape  # 'sphere', 'cylinder', 'cuboid', 'capsule'
+        self.start = None if start is None else np.asarray(start, dtype=float)
+        self.end = None if end is None else np.asarray(end, dtype=float)
+        if shape == 'capsule':
+            if self.start is None or self.end is None:
+                raise ValueError("capsule obstacles require start and end")
+            if self.start.shape != self.end.shape or self.start.ndim != 1:
+                raise ValueError("capsule start and end must be matching vectors")
+            if center is None:
+                center = (self.start + self.end) / 2.0
+        if center is None:
+            raise ValueError(f"{shape} obstacles require a center")
+        self.center = np.asarray(center, dtype=float)
+        self.radius = radius if radius is not None else 1.0
         self.size = size  # For cuboid: (length, width, height)
-        self.height = height  # For cylinder: height
+        self.height = height  # For vertical cylinder: height
 
 class ObstacleSet:
     def __init__(self):
         self.obstacle_list = []
 
-    def add_obstacle(self, shape, center, radius=None, size=None, height=None):
-        self.obstacle_list.append(Obstacle(shape, center, radius, size, height))
+    def add_obstacle(
+        self,
+        shape,
+        center=None,
+        radius=None,
+        size=None,
+        height=None,
+        start=None,
+        end=None,
+    ):
+        self.obstacle_list.append(
+            Obstacle(
+                shape,
+                center,
+                radius,
+                size,
+                height,
+                start=start,
+                end=end,
+            )
+        )
 
     def __len__(self):
         return len(self.obstacle_list)
@@ -37,6 +83,16 @@ class ObstacleSet:
             elif obs.shape == 'cuboid' and new_obs.shape == 'cuboid':
                 dist = np.linalg.norm(np.array(obs.center) - np.array(new_obs.center))
                 if dist < np.linalg.norm(obs.size / 2 + new_obs.size / 2):
+                    return True
+            elif obs.shape == 'capsule' and new_obs.shape == 'capsule':
+                # A conservative broad-phase test is sufficient for obstacle
+                # placement; the planner itself uses exact segment distance.
+                obs_bound = obs.radius + np.linalg.norm(obs.end - obs.start) / 2.0
+                new_bound = (
+                    new_obs.radius
+                    + np.linalg.norm(new_obs.end - new_obs.start) / 2.0
+                )
+                if np.linalg.norm(obs.center - new_obs.center) < obs_bound + new_bound:
                     return True
         return False
 

@@ -58,6 +58,20 @@ def _find_bypass_point(p1, p2, planner, bounds_min, bounds_max):
     if seg_len < 1e-8:
         return None
 
+    # First use the frustum -> spherical map -> free-channel guide.  The
+    # returned point has already passed exact 3-D point/segment checks.
+    projection_guide = getattr(planner, 'spherical_guide', None)
+    if projection_guide is not None:
+        projected_bypass = projection_guide.find_bypass(
+            p1,
+            p2,
+            point_collision=planner.check_point_collision,
+            segment_collision=planner.check_segment_collision,
+            bounds=np.vstack([bounds_min, bounds_max]),
+        )
+        if projected_bypass is not None:
+            return projected_bypass
+
     seg_unit = seg_dir / seg_len
     ortho = np.array([1, 0, 0]) if abs(seg_unit[0]) < 0.9 else np.array([0, 1, 0])
     perp1 = np.cross(seg_unit, ortho)
@@ -131,6 +145,7 @@ def _push_waypoint_to_safety(point, planner, bounds_min, bounds_max, obstacles):
     best_pt = None
     best_dist = np.inf
 
+    safety_margin = float(getattr(planner, 'safety_margin', 0.3))
     for obs in obstacles.obstacle_list:
         c = np.array(obs.center)
         direction = point - c
@@ -141,11 +156,11 @@ def _push_waypoint_to_safety(point, planner, bounds_min, bounds_max, obstacles):
         direction = direction / d
 
         if obs.shape == 'sphere':
-            safe_r = obs.radius + 0.5
+            safe_r = obs.radius + safety_margin
         elif obs.shape == 'cylinder':
-            safe_r = obs.radius + 0.5
+            safe_r = max(obs.radius, obs.height / 2) + safety_margin
         elif obs.shape == 'cuboid':
-            safe_r = max(obs.size) / 2 + 0.5
+            safe_r = np.linalg.norm(obs.size) / 2 + safety_margin
         else:
             safe_r = 1.5
 
@@ -281,13 +296,16 @@ def main():
     N_CUBOIDS   = 3         # 长方体数量
     DENSITY     = 'medium'  # 障碍物密度: 'low' / 'medium' / 'high'
     NUM_ON_PATH = 2         # 路径连线上放置的球体数（从 N_SPHERES 中扣除）
-    SAFETY_MARGIN = 1.2     # 膨胀安全裕度
+    SAFETY_MARGIN = 0.30    # 障碍物表面的绝对安全净空（米）
+    PLANNING_MODE = 'realtime'  # 'realtime'(50Hz局部层) / 'full'(FIRI全局层)
+    REALTIME_BUDGET = 0.020      # 实时局部层硬时间预算（秒）
+    ENABLE_VISUALIZATION = False # 实时部署关闭绘图；论文出图时手动开启
     # =================================================
 
     if SEED is not None:
         np.random.seed(SEED)
 
-    evaluator = PerformanceEvaluator()
+    evaluator = PerformanceEvaluator(generate_chart=ENABLE_VISUALIZATION)
     evaluator.start_timer("clean_temp_dir")
     clean_temp_dir()
     evaluator.stop_timer("clean_temp_dir")
@@ -326,14 +344,37 @@ def main():
     print("规划路径...")
     try:
         evaluator.start_timer("path_planning")
-        final_path = planner.plan_path(
-            start_point,
-            goal_point,
-            initial_waypoints=None,
-            smoothing=True,
-            max_replanning_attempts=7,
-            safety_margin=safety_margin
-        )
+        if PLANNING_MODE == 'realtime':
+            final_path = planner.plan_realtime(
+                start_point,
+                goal_point,
+                reference_path=np.vstack([start_point, goal_point]),
+                safety_margin=safety_margin,
+                time_budget=REALTIME_BUDGET,
+                max_repairs=1,
+            )
+            for key, value in planner.last_realtime_stats.items():
+                evaluator.record_value(f"realtime_{key}", value)
+            if final_path is None:
+                print(
+                    "实时预算内未找到安全路径；保持失败状态，"
+                    "应由低频 full FIRI 层异步更新参考路径"
+                )
+        elif PLANNING_MODE == 'full':
+            final_path = planner.plan_path(
+                start_point,
+                goal_point,
+                initial_waypoints=None,
+                smoothing=True,
+                max_replanning_attempts=7,
+                safety_margin=safety_margin,
+                use_spherical_guidance=True,
+            )
+        else:
+            raise ValueError(
+                f"未知 PLANNING_MODE={PLANNING_MODE!r}; "
+                "应为 'realtime' 或 'full'"
+            )
         evaluator.stop_timer("path_planning")
 
         # 如果 planner 未直接返回路径（返回 None/False/True），尝试从 temp 目录加载已保存的路径文件
@@ -401,6 +442,7 @@ def main():
             evaluator.record_value("smoothed_path_points_count", len(smoothed_path))
             evaluator.record_value("smoothed_path_length", calculate_path_length(smoothed_path))
             evaluator.record_value("final_collisions", collisions)
+            evaluator.record_value("planning_success", collisions == 0)
             
             avg_angle = analyze_path_smoothness(smoothed_path)
             evaluator.record_value("path_smoothness", avg_angle)
@@ -410,36 +452,39 @@ def main():
             analyze_path_results(final_path, smoothed_path, obstacles)
             evaluator.stop_timer("path_analysis")
             
-            evaluator.start_timer("matplotlib_visualization")
-            visualize_results(smoothed_path, obstacles, SPACE_BOUNDS)
-            evaluator.stop_timer("matplotlib_visualization")
-            
-            print("\nOpen3D离屏渲染...")
-            evaluator.start_timer("open3d_visualization")
-            try:
-                o3d_ok = visualize_with_open3d(
-                    smoothed_path,
-                    obstacles,
-                    start_point,
-                    goal_point,
-                    inflated_obstacles=None,
-                    safety_margin=safety_margin,
-                    output_path='temp/open3d_visualization.png'
-                )
-                if not o3d_ok:
-                    print("Open3D离屏渲染不可用，已使用matplotlib保存静态图像")
-            except Exception as e:
-                print(f"Open3D渲染失败: {str(e)}")
-            evaluator.stop_timer("open3d_visualization")
+            if ENABLE_VISUALIZATION:
+                evaluator.start_timer("matplotlib_visualization")
+                visualize_results(smoothed_path, obstacles, SPACE_BOUNDS)
+                evaluator.stop_timer("matplotlib_visualization")
 
-            print("\n启动Open3D交互式可视化...")
-            try:
-                visualize_interactive(smoothed_path, obstacles, start_point, goal_point)
-            except Exception as e:
-                print(f"交互式可视化失败: {str(e)}")
+                print("\nOpen3D离屏渲染...")
+                evaluator.start_timer("open3d_visualization")
+                try:
+                    o3d_ok = visualize_with_open3d(
+                        smoothed_path,
+                        obstacles,
+                        start_point,
+                        goal_point,
+                        inflated_obstacles=None,
+                        safety_margin=safety_margin,
+                        output_path='temp/open3d_visualization.png'
+                    )
+                    if not o3d_ok:
+                        print("Open3D离屏渲染不可用，已使用matplotlib保存静态图像")
+                except Exception as e:
+                    print(f"Open3D渲染失败: {str(e)}")
+                evaluator.stop_timer("open3d_visualization")
+
+                print("\n启动Open3D交互式可视化...")
+                try:
+                    visualize_interactive(
+                        smoothed_path, obstacles, start_point, goal_point
+                    )
+                except Exception as e:
+                    print(f"交互式可视化失败: {str(e)}")
             evaluator.save_results()
             
-            return True
+            return collisions == 0
         else:
             print("路径规划失败")
             evaluator.record_value("planning_success", False)

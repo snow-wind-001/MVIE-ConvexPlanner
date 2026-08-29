@@ -1,0 +1,35 @@
+Use case: scientific-educational
+Asset type: full-width paper mechanism figure for a robotics SCI journal
+
+ROLE AND OUTPUT
+Create a publication-grade scientific computation diagram for a 3-D collision-free trajectory-planning pipeline. Use a landscape 16:7 canvas suitable for a two-column paper at approximately 178 mm width.
+
+SCIENTIFIC MESSAGE
+The figure must show that the implementation forms a nominal path through waypoint pushing, per-segment convex-region construction, a candidate MVIE, sampled constrained optimization, and B-spline smoothing; an explicit collision-check branch invokes heuristic repair when the nominal path is unsafe.
+
+STRUCTURE AND READING ORDER
+Use one dominant left-to-right data path. Place two compact inputs at the far left: `Start and goal` and `Obstacle primitives`. Merge them into `Initial control points`, then `Safety push`, then `Segment seeds`. In the center, expose the region computation as `Restrictive halfspaces` -> `Convex polytope` -> `Candidate MVIE`. Continue to `Sampled SLSQP`, `B-spline smoothing`, and `Collision check`. From `Collision check`, route a green `Safe` edge to `Final path`. Route a dashed magenta `Unsafe` edge downward to `Heuristic repair`, then return a thin feedback arrow to `Collision check`. Do not hide the branch or turn it into a caption-only note.
+
+COMPONENTS AND SCIENTIFIC OBJECTS
+Show small, concrete representations rather than generic icons: a start/goal pair and simple sphere/cylinder/cuboid obstacles; a short polyline with control points; an outward waypoint-displacement arrow near an obstacle; three segment seed points; several separating halfspaces forming a polytope; one ellipsoid inside the polytope; a short sequence of optimized control points; and a smooth candidate curve. Inside `Heuristic repair`, use a compact bypass-point insertion cue. Every large region must contain a representation or an operation.
+
+CONNECTIONS
+Use solid dark arrows for primary data flow, thin blue arrows for safety-recovery operations, a dashed magenta arrow for the unsafe branch, and a green terminal edge for a path that passes the current collision checker. Keep arrow sources and destinations explicit. Do not add training, learning, map-building, feedback-control, or sensor modules.
+
+VISUAL ENCODING
+Use an accessible restrained palette: neutral gray for generic inputs and established region operations, Okabe-Ito blue for the code-specific safety push and heuristic repair, vermillion only for an unsafe candidate, and green only for the safe terminal edge. Give the central region/optimization computation and the recovery branch the strongest visual weight. Keep the background white with no gradients.
+
+STYLE
+Clean scientific vector-illustration aesthetic; flat geometry; precise alignment; restrained semantic grouping; thin consistent strokes; generous whitespace; no decorative 3-D rendering. The result must read as a computation graph at paper width, not as a slide, poster, dashboard, or sequence of marketing cards.
+
+TYPOGRAPHY
+Use only these exact labels: `Start and goal`, `Obstacle primitives`, `Initial control points`, `Safety push`, `Segment seeds`, `Restrictive halfspaces`, `Convex polytope`, `Candidate MVIE`, `Sampled SLSQP`, `B-spline smoothing`, `Collision check`, `Heuristic repair`, `Unsafe`, `Safe`, `Final path`. Preserve `MVIE` and `SLSQP` as uppercase acronyms without expanding them. Keep text horizontal, high contrast, and readable at final paper width. If exact text cannot be rendered reliably, leave clean label slots instead of inventing text.
+
+OUTPUT CONSTRAINTS
+Landscape 16:7, white background, crop-safe margins, no title inside the canvas, no caption inside the canvas, and no watermark. Keep the final figure visually economical enough for later semantic SVG reconstruction.
+
+NEGATIVE CONSTRAINTS
+No unsupported components, fake metrics, fabricated equations, learned models, robots or people, logos, UI chrome, glossy cards, hero headings, stage numbers, explanatory paragraphs, random icons, decorative gradients, 3-D effects, ambiguous arrows, or unlabeled flows.
+
+Reference images: none.
+Generation status: not sent; a verified GPT Image 2 built-in capability was unavailable in the current session.

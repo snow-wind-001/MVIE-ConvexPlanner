@@ -11,11 +11,16 @@ class PerformanceEvaluator:
     """
     Performance evaluation tool for recording algorithm execution time and resource usage
     """
-    def __init__(self, output_file="temp/performance_data.json"):
+    def __init__(
+        self,
+        output_file="temp/performance_data.json",
+        generate_chart=True,
+    ):
         self.timestamps = {}
         self.durations = {}
         self.start_times = {}
         self.output_file = output_file
+        self.generate_chart = bool(generate_chart)
         self.system_info = self._get_system_info()
 
         # Record program start time
@@ -141,7 +146,8 @@ class PerformanceEvaluator:
         print(f"Performance results saved to {self.output_file} and {report_file}")
 
         # Generate performance chart
-        self._generate_performance_chart()
+        if self.generate_chart:
+            self._generate_performance_chart()
 
         return output_data
 

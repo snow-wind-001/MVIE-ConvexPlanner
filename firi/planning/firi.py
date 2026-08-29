@@ -8,6 +8,7 @@ class FIRI:
         self.dim = dimension
         self.mvie_socp = MVIE_SOCP(dimension)
         self.space_bounds = space_bounds
+        self.safety_margin = 0.0
     
     def compute_safe_region(self, seed_points, initial_ellipsoid=None, 
                            max_iterations=5, volume_threshold=0.05):
@@ -76,12 +77,22 @@ class FIRI:
                     obs_radius = float(np.linalg.norm(np.array(obs.size)) / 2)
                 elif shape == 'cylinder' and getattr(obs, 'height', None) is not None:
                     obs_radius = float(max(obs.radius, obs.height / 2))
+                elif (
+                    shape == 'capsule'
+                    and getattr(obs, 'start', None) is not None
+                    and getattr(obs, 'end', None) is not None
+                ):
+                    obs_radius = float(
+                        obs.radius
+                        + np.linalg.norm(np.asarray(obs.end) - np.asarray(obs.start)) / 2.0
+                    )
                 elif hasattr(obs, 'radius') and obs.radius is not None:
                     obs_radius = float(obs.radius)
                 elif isinstance(obs, dict) and 'radius' in obs:
                     obs_radius = float(obs['radius'])
                 else:
                     obs_radius = 1.0
+                obs_radius += max(0.0, float(self.safety_margin))
             except Exception as e:
                 print(f"  障碍物处理出错: {e}")
                 continue
